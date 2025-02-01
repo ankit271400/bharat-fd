@@ -38,7 +38,7 @@ class FAQ(models.Model):
 
     def __str__(self):
         return self.question
-✅ 2. WYSIWYG Editor Integration
+ 2. WYSIWYG Editor Integration
 Install django-ckeditor:
 sh
 Copy
@@ -112,7 +112,7 @@ urlpatterns = [
 ]
 Now, calling GET /api/faqs/?lang=hi will return the translated question.
 
-✅ 4. Caching with Redis
+ 4. Caching with Redis
 Install django-redis:
 sh
 Copy
@@ -236,7 +236,7 @@ sh
 Copy
 Edit
 docker-compose up --build
-✅ 9. Git Best Practices
+ 9. Git Best Practices
 sh
 Copy
 Edit
@@ -246,7 +246,7 @@ git commit -m "feat: Add multilingual FAQ model"
 git branch -M main
 git remote add origin <your_repo_url>
 git push -u origin main
-✅ 10. Documentation
+ 10. Documentation
 Create README.md:
 
 md
