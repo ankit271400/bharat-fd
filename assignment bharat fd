@@ -1,1 +1,272 @@
+ Project Structure
+graphql
+Copy
+Edit
+faq_project/
+│── faq_app/              # Django app for FAQs
+│   ├── migrations/
+│   ├── models.py         # FAQ model with multilingual support
+│   ├── serializers.py    # DRF serializers for API
+│   ├── views.py          # API views
+│   ├── urls.py           # API endpoints
+│   ├── admin.py          # Admin panel setup
+│   ├── tests.py          # Unit tests
+│── faq_project/
+│   ├── settings.py       # Django settings (with Redis & CKEditor)
+│   ├── urls.py           # Main project URLs
+│── docker-compose.yml    # Docker support
+│── Dockerfile            # Docker setup
+│── manage.py
+│── requirements.txt
+│── README.md
+1. Model Design (FAQ Model)
+python
+Copy
+Edit
+from django.db import models
+from ckeditor.fields import RichTextField
+from django.utils.translation import gettext_lazy as _
 
+class FAQ(models.Model):
+    question = models.TextField(_("Question"))
+    answer = RichTextField(_("Answer"))
+    question_hi = models.TextField(_("Question (Hindi)"), blank=True, null=True)
+    question_bn = models.TextField(_("Question (Bengali)"), blank=True, null=True)
+
+    def get_translated_question(self, lang="en"):
+        return getattr(self, f"question_{lang}", self.question)
+
+    def __str__(self):
+        return self.question
+✅ 2. WYSIWYG Editor Integration
+Install django-ckeditor:
+sh
+Copy
+Edit
+pip install django-ckeditor
+Add to settings.py:
+python
+Copy
+Edit
+INSTALLED_APPS = [
+    'ckeditor',
+    'faq_app',
+]
+CKEDITOR_CONFIGS = {
+    'default': {
+        'toolbar': 'full',
+        'height': 300,
+        'width': '100%',
+    }
+}
+Apply migrations:
+sh
+Copy
+Edit
+python manage.py makemigrations
+python manage.py migrate
+ 3. REST API (Django REST Framework)
+Install DRF:
+
+sh
+Copy
+Edit
+pip install djangorestframework
+Serializers
+python
+Copy
+Edit
+from rest_framework import serializers
+from .models import FAQ
+
+class FAQSerializer(serializers.ModelSerializer):
+    translated_question = serializers.SerializerMethodField()
+
+    def get_translated_question(self, obj):
+        lang = self.context.get('request').query_params.get('lang', 'en')
+        return obj.get_translated_question(lang)
+
+    class Meta:
+        model = FAQ
+        fields = ['id', 'translated_question', 'answer']
+Views
+python
+Copy
+Edit
+from rest_framework import generics
+from .models import FAQ
+from .serializers import FAQSerializer
+
+class FAQListView(generics.ListAPIView):
+    queryset = FAQ.objects.all()
+    serializer_class = FAQSerializer
+URLs
+python
+Copy
+Edit
+from django.urls import path
+from .views import FAQListView
+
+urlpatterns = [
+    path('api/faqs/', FAQListView.as_view(), name='faq-list'),
+]
+Now, calling GET /api/faqs/?lang=hi will return the translated question.
+
+✅ 4. Caching with Redis
+Install django-redis:
+sh
+Copy
+Edit
+pip install django-redis
+Update settings.py:
+python
+Copy
+Edit
+CACHES = {
+    'default': {
+        'BACKEND': 'django_redis.cache.RedisCache',
+        'LOCATION': 'redis://127.0.0.1:6379/1',
+        'OPTIONS': {'CLIENT_CLASS': 'django_redis.client.DefaultClient'},
+    }
+}
+Cache translations in the view:
+python
+Copy
+Edit
+from django.core.cache import cache
+
+class FAQListView(generics.ListAPIView):
+    queryset = FAQ.objects.all()
+    serializer_class = FAQSerializer
+
+    def list(self, request, *args, **kwargs):
+        cache_key = f"faqs_{request.GET.get('lang', 'en')}"
+        cached_data = cache.get(cache_key)
+        if cached_data:
+            return Response(cached_data)
+        
+        response = super().list(request, *args, **kwargs)
+        cache.set(cache_key, response.data, timeout=3600)
+        return response
+ 5. Automatic Translations
+Install googletrans:
+sh
+Copy
+Edit
+pip install googletrans==4.0.0-rc1
+Modify the model:
+python
+Copy
+Edit
+from googletrans import Translator
+
+def save(self, *args, **kwargs):
+    if not self.question_hi:
+        self.question_hi = Translator().translate(self.question, src='en', dest='hi').text
+    if not self.question_bn:
+        self.question_bn = Translator().translate(self.question, src='en', dest='bn').text
+    super().save(*args, **kwargs)
+ 6. Admin Panel
+python
+Copy
+Edit
+from django.contrib import admin
+from .models import FAQ
+
+@admin.register(FAQ)
+class FAQAdmin(admin.ModelAdmin):
+    list_display = ("question", "answer")
+ 7. Unit Testing
+Install pytest:
+
+sh
+Copy
+Edit
+pip install pytest-django
+Create tests.py:
+
+python
+Copy
+Edit
+from django.test import TestCase
+from .models import FAQ
+
+class FAQTestCase(TestCase):
+    def setUp(self):
+        self.faq = FAQ.objects.create(question="What is Django?", answer="A Python web framework.")
+
+    def test_translation(self):
+        self.assertEqual(self.faq.get_translated_question("en"), "What is Django?")
+Run tests:
+
+sh
+Copy
+Edit
+pytest
+ 8. Deployment (Docker + Gunicorn)
+Create Dockerfile:
+
+dockerfile
+Copy
+Edit
+FROM python:3.9
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt
+COPY . .
+CMD gunicorn faq_project.wsgi:application --bind 0.0.0.0:8000
+Create docker-compose.yml:
+
+yaml
+Copy
+Edit
+version: "3"
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+  redis:
+    image: redis:alpine
+Run:
+
+sh
+Copy
+Edit
+docker-compose up --build
+✅ 9. Git Best Practices
+sh
+Copy
+Edit
+git init
+git add .
+git commit -m "feat: Add multilingual FAQ model"
+git branch -M main
+git remote add origin <your_repo_url>
+git push -u origin main
+✅ 10. Documentation
+Create README.md:
+
+md
+Copy
+Edit
+# Multilingual FAQ API
+A Django-based FAQ system with multilingual support, WYSIWYG editor, caching, and API.
+
+##  Installation
+1. Clone repo: `git clone <repo_url>`
+2. Install deps: `pip install -r requirements.txt`
+3. Run migrations: `python manage.py migrate`
+4. Start server: `python manage.py runserver`
+
+##  API Usage
+- Get FAQs: `GET /api/faqs/?lang=hi`
+ Final Thoughts
+This setup gives you:  Multilingual FAQ storage
+ WYSIWYG editor for rich-text answers
+ REST API with fast responses
+ Redis caching for performance
+ Automated translations
+ Docker support for easy deployment
